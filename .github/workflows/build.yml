@@ -19,7 +19,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      name: Download Forge MDK (robust)
+      - name: Download Forge MDK (robust)
         run: |
           set -euo pipefail
 
