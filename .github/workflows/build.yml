@@ -1,70 +1,88 @@
-steps:
-  - name: Checkout repository
-    uses: actions/checkout@v4
+name: Build Gembina Srca
 
-  - name: Set up Java 17
-    uses: actions/setup-java@v4
-    with:
-      distribution: temurin
-      java-version: '17'
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
 
-  - name: Download Forge MDK (robust)
-    run: |
-      set -euo pipefail
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-      MDK_CANDIDATES=(
-        "https://maven.minecraftforge.net/net/minecraftforge/forge/1.20.4-49.2.0/forge-1.20.4-49.2.0-mdk.zip"
-        "https://maven.minecraftforge.net/net/minecraftforge/forge/1.20.2-48.1.0/forge-1.20.2-48.1.0-mdk.zip"
-        "https://maven.minecraftforge.net/net/minecraftforge/forge/1.20.6-50.0.1/forge-1.20.6-50.0.1-mdk.zip"
-        "https://files.minecraftforge.net/maven/net/minecraftforge/forge/1.20.4-49.2.0/forge-1.20.4-49.2.0-mdk.zip"
-      )
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      SUCCESS=0
-      for URL in "${MDK_CANDIDATES[@]}"; do
-        echo "Trying: $URL"
-        if curl -fLS -D - --retry 3 --retry-delay 5 "$URL" -o forge-mdk.zip; then
-          file_type=$(file -b forge-mdk.zip || true)
-          echo "file says: $file_type"
-          if echo "$file_type" | grep -iq "zip\|archive"; then
-            if unzip -t forge-mdk.zip >/dev/null 2>&1; then
-              SUCCESS=1
-              break
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Download Forge MDK (robust)
+        run: |
+          set -euo pipefail
+
+          # Kandidati za MDK (redosled pokušaja)
+          MDK_CANDIDATES=(
+            "https://maven.minecraftforge.net/net/minecraftforge/forge/1.20.6-50.0.1/forge-1.20.6-50.0.1-mdk.zip"
+            "https://maven.minecraftforge.net/net/minecraftforge/forge/1.20.4-49.2.0/forge-1.20.4-49.2.0-mdk.zip"
+            "https://maven.minecraftforge.net/net/minecraftforge/forge/1.20.2-48.1.0/forge-1.20.2-48.1.0-mdk.zip"
+          )
+
+          SUCCESS=0
+          for URL in "${MDK_CANDIDATES[@]}"; do
+            echo "Trying: $URL"
+            if curl -fSL --retry 3 --retry-delay 5 "$URL" -o forge-mdk.zip; then
+              file_type=$(file -b forge-mdk.zip || true)
+              echo "file says: $file_type"
+              if echo "$file_type" | grep -Eiq "zip|archive"; then
+                if unzip -t forge-mdk.zip >/dev/null 2>&1; then
+                  echo "Valid zip from $URL"
+                  SUCCESS=1
+                  break
+                else
+                  echo "unzip test failed for $URL"
+                fi
+              else
+                echo "Downloaded content is not a zip (probably HTML) for $URL"
+              fi
+            else
+              echo "curl failed for $URL"
             fi
+            echo "----"
+          done
+
+          if [ "$SUCCESS" -ne 1 ]; then
+            echo "ERROR: Could not download a valid Forge MDK zip from any candidate URL."
+            printf '%s\n' "${MDK_CANDIDATES[@]}"
+            exit 1
           fi
-        fi
-        echo "----"
-      done
 
-      if [ "$SUCCESS" -ne 1 ]; then
-        echo "ERROR: Could not download a valid Forge MDK zip from any candidate URL."
-        printf '%s\n' "${MDK_CANDIDATES[@]}"
-        exit 1
-      fi
+          mkdir -p mdk
+          unzip -q forge-mdk.zip -d mdk
+          ls -la mdk
 
-      mkdir -p mdk
-      unzip -q forge-mdk.zip -d mdk
-      ls -la mdk
+      - name: Copy mod source into MDK
+        run: |
+          mkdir -p mdk/src/main
+          if [ -d "src" ]; then
+            cp -r src mdk/ || true
+          fi
+          mkdir -p mdk/src/main/resources
+          if [ -d "src/main/resources" ]; then
+            cp -r src/main/resources/* mdk/src/main/resources/ || true
+          fi
+          ls -R mdk/src || true
 
-  - name: Copy mod source into MDK
-    run: |
-      mkdir -p mdk/src/main
-      if [ -d "src" ]; then
-        cp -r src mdk/ || true
-      fi
-      mkdir -p mdk/src/main/resources
-      if [ -d "src/main/resources" ]; then
-        cp -r src/main/resources/* mdk/src/main/resources/ || true
-      fi
-      ls -R mdk/src || true
+      - name: Build (Gradle)
+        working-directory: mdk
+        run: |
+          chmod +x gradlew || true
+          ./gradlew --no-daemon build -x test || ./gradlew --no-daemon build
 
-  - name: Build (Gradle)
-    working-directory: mdk
-    run: |
-      chmod +x gradlew || true
-      ./gradlew --no-daemon build -x test || ./gradlew --no-daemon build
-
-  - name: Upload artifact
-    uses: actions/upload-artifact@v4
-    with:
-      name: gembinasrca-jar
-      path: mdk/build/libs/*.jar
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gembinasrca-jar
+          path: mdk/build/libs/*.jar
