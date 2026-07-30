@@ -19,14 +19,27 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Download Forge MDK (1.20.0)
+      - name: Download Forge MDK (debug)
         run: |
           set -e
           MDK_URL="https://maven.minecraftforge.net/net/minecraftforge/forge/1.20.0-56.1.0/forge-1.20.0-56.1.0-mdk.zip"
           echo "Downloading $MDK_URL"
-          curl -fLS --retry 3 --retry-delay 5 "$MDK_URL" -o forge-mdk.zip
+          # pokušaj preuzimanja sa retry, ispiši response header-e za debug
+          # -sSL tiho + follow redirects, -D - ispiše header na stdout
+          curl -sSL -D - --retry 3 --retry-delay 5 "$MDK_URL" -o forge-mdk.zip || {
+            echo "curl failed with code $?"
+            echo "==== First 200 bytes of downloaded content (if any) ===="
+            head -c 200 forge-mdk.zip || true
+            echo "==== file output ===="
+            file forge-mdk.zip || true
+            exit 1
+          }
+          echo "==== Received file info ===="
           file forge-mdk.zip || true
-          unzip -t forge-mdk.zip
+          echo "==== First 200 bytes (hex) ===="
+          hexdump -C -n 200 forge-mdk.zip || true
+          echo "==== unzip test ===="
+          unzip -t forge-mdk.zip || { echo "unzip test failed"; exit 1; }
           unzip -q forge-mdk.zip -d mdk
           ls -la mdk
 
