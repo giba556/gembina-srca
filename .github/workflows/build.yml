@@ -32,7 +32,7 @@ jobs:
           unzip -t forge-mdk.zip
           unzip -q forge-mdk.zip -d mdk
           ls -la mdk
-        run: |
+        
           set -e
           MDK_URL="https://files.minecraftforge.net/maven/net/minecraftforge/forge/index_1.20.0/forge-1.20.0-56.1.0-mdk.zip"
           echo "Downloading $MDK_URL"
