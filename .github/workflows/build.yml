@@ -19,27 +19,48 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Download Forge MDK (debug)
+      name: Download Forge MDK (robust)
         run: |
-          set -e
-          MDK_URL="https://maven.minecraftforge.net/net/minecraftforge/forge/1.20.0-56.1.0/forge-1.20.0-56.1.0-mdk.zip"
-          echo "Downloading $MDK_URL"
-          # pokušaj preuzimanja sa retry, ispiši response header-e za debug
-          # -sSL tiho + follow redirects, -D - ispiše header na stdout
-          curl -sSL -D - --retry 3 --retry-delay 5 "$MDK_URL" -o forge-mdk.zip || {
-            echo "curl failed with code $?"
-            echo "==== First 200 bytes of downloaded content (if any) ===="
-            head -c 200 forge-mdk.zip || true
-            echo "==== file output ===="
-            file forge-mdk.zip || true
+          set -euo pipefail
+
+          # Lista kandidata (redosled: prvo Maven, pa files...)
+          MDK_CANDIDATES=(
+            "https://maven.minecraftforge.net/net/minecraftforge/forge/1.20.0-56.1.0/forge-1.20.0-56.1.0-mdk.zip"
+            "https://files.minecraftforge.net/maven/net/minecraftforge/forge/1.20.0-56.1.0/forge-1.20.0-56.1.0-mdk.zip"
+          )
+
+          SUCCESS=0
+          for URL in "${MDK_CANDIDATES[@]}"; do
+            echo "Trying: $URL"
+            if curl -fLS -D - --retry 3 --retry-delay 5 "$URL" -o forge-mdk.zip; then
+              echo "Downloaded from $URL — checking file type..."
+              file_type=$(file -b forge-mdk.zip || true)
+              echo "file says: $file_type"
+              if echo "$file_type" | grep -iq "zip\|archive"; then
+                echo "Looks like a zip, running unzip test..."
+                if unzip -t forge-mdk.zip >/dev/null 2>&1; then
+                  echo "Unzip test passed — using this file."
+                  SUCCESS=1
+                  break
+                else
+                  echo "unzip test failed for file from $URL"
+                fi
+              else
+                echo "Downloaded content is not zip (probably HTML) — continuing to next candidate."
+              fi
+            else
+              echo "curl failed for $URL (HTTP error or network)."
+            fi
+            echo "----"
+          done
+
+          if [ "$SUCCESS" -ne 1 ]; then
+            echo "ERROR: Could not download a valid Forge MDK zip from any candidate URL."
+            printf '%s\n' "${MDK_CANDIDATES[@]}"
             exit 1
-          }
-          echo "==== Received file info ===="
-          file forge-mdk.zip || true
-          echo "==== First 200 bytes (hex) ===="
-          hexdump -C -n 200 forge-mdk.zip || true
-          echo "==== unzip test ===="
-          unzip -t forge-mdk.zip || { echo "unzip test failed"; exit 1; }
+          fi
+
+          mkdir -p mdk
           unzip -q forge-mdk.zip -d mdk
           ls -la mdk
 
