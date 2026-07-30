@@ -22,6 +22,18 @@ jobs:
       - name: Download Forge MDK (1.20.0)
         run: |
           set -e
+          # direktan Maven URL do MDK (verzija 1.20.0-56.1.0)
+          MDK_URL="https://maven.minecraftforge.net/net/minecraftforge/forge/1.20.0-56.1.0/forge-1.20.0-56.1.0-mdk.zip"
+          echo "Downloading $MDK_URL"
+          # -f -> fail on HTTP error, -L -> follow redirects, -S -> show error
+          curl -fLS "$MDK_URL" -o forge-mdk.zip
+          # proveri šta je preuzeto (da ne bismo imali HTML umesto zipa)
+          file forge-mdk.zip || true
+          unzip -t forge-mdk.zip
+          unzip -q forge-mdk.zip -d mdk
+          ls -la mdk
+        run: |
+          set -e
           MDK_URL="https://files.minecraftforge.net/maven/net/minecraftforge/forge/index_1.20.0/forge-1.20.0-56.1.0-mdk.zip"
           echo "Downloading $MDK_URL"
           curl -L "$MDK_URL" -o forge-mdk.zip
